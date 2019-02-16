@@ -1,2 +1,3 @@
 files/filelist.xml
 files/*.zip
+__pycache__

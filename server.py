@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
 
+import logging, json, os, shutil, time, requests, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import logging, json, os, shutil, time, requests
 from wsgiref.handlers import format_date_time
+from urllib.parse import urlsplit, urlunsplit
+
+
+def genurl(base, obj, host=None):
+    if isinstance(base, bytes):
+        base = base.decode('utf-8')
+    parts = list(urlsplit(base))
+    parts[0] = 'http'
+    if host:
+        parts[1] = host
+    parts[2] = parts[2].rsplit('/',1)[0] + '/' + obj # Replace the last element of the path with the wanted one
+    parts[3] = ''
+    parts[4] = ''
+    logging.debug('generated url %s', parts)
+    return urlunsplit(parts)
 
 s = requests.Session()
 
 class Handler(BaseHTTPRequestHandler):
-    def send_headers(self, length, allow_range=False):
+    def send_headers(self, length):
 
-        print(length)
+        logging.debug('sending response length %d', length)
 
         self.send_response(200)
         self.send_header('Content-Length', length)
@@ -26,26 +41,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         logging.debug("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
-        if self.path == '/TDS/data/files/p3/s15/G2918/g1647/v220916/f1//full/filelist.xml':
+        if self.path.rsplit('/',1)[1] == 'filelist.xml':
             logging.info('Serving filelist')
-            resp = open(os.path.join('files', 'filelist.xml'), 'rb').read()
-            self.send_resp(resp)
+            self.send_resp(self.server.filelist)
         elif self.path[:4] == '/TDS':
-            logging.info("redir")
+            logging.info("Serving data...")
             # Forward the request.
             r = requests.Request('GET', 'http://update.hicloud.com:8180'+self.path, headers={}).prepare()
             r.headers = dict(self.headers) # We want EXACTLY the same headers.
             resp = s.send(r, stream=True)
-            logging.info("request sent!")
-            logging.info(resp.headers)
+            logging.debug("request sent!")
+            logging.debug(resp.headers)
             self.send_response(resp.status_code)
             for h in resp.headers:
                 logging.debug('%s: %s', h, resp.headers[h])
                 self.send_header(h, resp.headers[h])
             self.end_headers()
-            logging.info("forwarded headers done")
+            logging.debug("forwarded headers done")
             shutil.copyfileobj(resp.raw, self.wfile)
-            logging.info("forwarded data!")
+            logging.debug("forwarded data!")
         else:
             logging.error('Invalid path for GET %s', self.path)
 
@@ -58,11 +72,11 @@ class Handler(BaseHTTPRequestHandler):
         data = json.loads(post_data)
 
         if self.path == '/sp_ard_common/v2/UpdateReport.action':
-            logging.info("UpdateReport")
+            logging.info("UpdateReport ignored.")
             self.send_response(404)
 #            self.server.stop = True
         elif self.path == '/sp_ard_common/v2/Check.action?latest=true':
-            logging.info("Check.action")
+            logging.info("Check.action called, sending package...")
             try:
                 data['rules']
             except KeyError:
@@ -70,10 +84,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if data['rules']['PackageType'][:4] != 'full':
-                logging.error("PackageType was invalid, should begin with 'full' but was '%s'", data['rules']['PackageType'][:4])
+                logging.error("PackageType was invalid, should begin 'full' but was '%s'", data['rules']['PackageType'])
                 return
-
-            resp = json.dumps({'status':'0', 'components': [{'name':'testpackage','version':'TESTPACKAGE','versionID':'999999999','description':'a test update','createTime':'2050-12-30T23:59:59+0000','url':'http://query.hicloud.com/TDS/data/files/p3/s15/G2918/g1647/v220916/f1/'}]})
+            resp = json.dumps({'status':'0', 'components': [{'name':'testpackage','version':'TESTPACKAGE','versionID':'999999999','description':'a test update','createTime':'2050-12-30T23:59:59+0000','url':genurl(self.server.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/'}]})
             self.send_resp(resp.encode('utf-8'))
         else:
             logging.error("Unknown POST Path: %s", self.path)
@@ -92,16 +105,23 @@ def run(server_class=ThreadingHTTPServer, handler_class=Handler, port=80):
         elif e.errno == 13:
             logging.error("This script must be run as root/admin to access port 80.")
         raise
-    logging.info('Starting httpd...\n')
-    httpd.stop = False
-    while not httpd.stop:
-        try:
-            httpd.handle_request()
-            print("command done")
-        except KeyboardInterrupt:
-            httpd.stop = True
+    httpd.url = sys.argv[1] if len(sys.argv) > 1 else input('Please enter the filelist URL: ')
+    if urlsplit(httpd.url)[1] != 'update.hicloud.com:8180':
+        logging.error('invalid url %s', urlsplit(httpd.url)[1])
+        sys.exit(1)
+    if httpd.url.rsplit('/',1)[1] != 'filelist.xml':
+        logging.error('invalid url %s', httpd.url.rsplit('/',1)[1])
+        sys.exit(1)
+    httpd.filelist = s.get(httpd.url).text.encode('utf-8')
+    logging.debug(httpd.filelist)
+    logging.info('Starting server...\n')
+    print(genurl(httpd.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/')
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
     httpd.server_close()
-    logging.info('Stopping httpd...\n')
+    logging.info('Stopping server...\n')
 
 if __name__ == '__main__':
     run()
