@@ -36,6 +36,9 @@ def genurl(base, obj, host=None):
 s = requests.Session()
 
 class Handler(BaseHTTPRequestHandler):
+    def log_request(self, code='-', size='-'):
+        logging.debug('"%s" %s %s', self.requestline, str(code), str(size))
+
     def send_headers(self, length):
 
         logging.debug('sending response length %d', length)
