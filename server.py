@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
             if data['rules']['PackageType'][:4] != 'full':
                 logging.error("PackageType was invalid, should begin 'full' but was '%s'", data['rules']['PackageType'])
                 return
-            resp = json.dumps({'status':'0', 'components': [{'name':'testpackage','version':'TESTPACKAGE','versionID':'999999999','description':'a test update','createTime':'2050-12-30T23:59:59+0000','url':genurl(self.server.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/'}]})
+            resp = json.dumps({'status':'0', 'components': [{'name':'System Repair','version':'System Repair','versionID':'999999999','description':'System Repair','createTime':'2050-12-30T23:59:59+0000','url':genurl(self.server.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/'}]})
             self.send_resp(resp.encode('utf-8'))
         else:
             logging.error("Unknown POST Path: %s", self.path)
