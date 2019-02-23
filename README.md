@@ -31,7 +31,7 @@ This program allows you to flash any update package for your device model and re
         - Run `echo "(your IP address) query.hicloud.com" >> /etc/hosts` in a root shell
     - For Windows:
         - https://www.tp-link.com/us/faq-838.html
-        - Use https://gist.github.com/zenorocha/18b10a14b2deb214dc4ce43a2d2e2992 to add `(your IP address) query.hicloud.com` into the hosts file.
+        - Use https://gist.github.com/zenorocha/18b10a14b2deb214dc4ce43a2d2e2992 to add `(your IP address) query.hicloud.com` at the end of the hosts file.
     - Reboot
     - Check it was successful by visiting http://query.hicloud.com/sp_ard_common/v2/Check.action. If the configuration was successful, this page will not load. If it shows something like `{"status":"-1"}` you did not configure hosts correctly or didn't reboot.
 4. Connect an external network connection. Turn the hotspot back on, and check that you can access the Internet with the hotspot on. 
