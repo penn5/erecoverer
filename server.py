@@ -105,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             resp = json.dumps({'status':'0', 'components': [{'name':'System Repair','version':'System Repair','versionID':'999999999','description':'System Repair','createTime':'2050-12-30T23:59:59+0000','url':genurl(self.server.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/'}]})
             self.send_resp(resp.encode('utf-8'))
+        elif self.path == '/sp_ard_common/v1/authorize.action':
+            self.send_resp(b'data=&sign=&cert=') # This is what the Huawei servers sent me, idk if its correct though.
         else:
             logging.error("Unknown POST Path: %s", self.path)
 
