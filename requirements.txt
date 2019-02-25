@@ -1,0 +1,5 @@
+requests
+
+#comment out the line below if you want. it will speed the install up, but may be needed for some devices (Getting Authentication Info Failed)
+dnspython
+
