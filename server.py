@@ -19,15 +19,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from wsgiref.handlers import format_date_time
 from urllib.parse import urlsplit, urlunsplit
 
+resolver = False
 
-def genurl(base, obj, host=None):
+def genurl(base, obj, host=None, full=False):
     if isinstance(base, bytes):
         base = base.decode('utf-8')
     parts = list(urlsplit(base))
     parts[0] = 'http'
     if host:
         parts[1] = host
-    parts[2] = parts[2].rsplit('/',1)[0] + '/' + obj # Replace the last element of the path with the wanted one
+    if full:
+        parts[2] = obj # Replace the last element of the path with the wanted one
+    else:
+        parts[2] = parts[2].rsplit('/',1)[0] + '/' + obj # Replace the last element of the path with the wanted one
     parts[3] = ''
     parts[4] = ''
     logging.debug('generated url %s', parts)
@@ -86,13 +90,13 @@ class Handler(BaseHTTPRequestHandler):
         logging.debug("POST request,\nPath: %s\nHeaders:\n%s\n\nBody:\n%s\n",
                 str(self.path), str(self.headers), post_data.decode('utf-8'))
 
-        data = json.loads(post_data)
 
         if self.path == '/sp_ard_common/v2/UpdateReport.action':
             logging.info("UpdateReport ignored.")
             self.send_response(404)
 #            self.server.stop = True
         elif self.path == '/sp_ard_common/v2/Check.action?latest=true':
+            data = json.loads(post_data)
             logging.info("Check.action called, sending package...")
             try:
                 data['rules']
@@ -105,10 +109,34 @@ class Handler(BaseHTTPRequestHandler):
                 return
             resp = json.dumps({'status':'0', 'components': [{'name':'System Repair','version':'System Repair','versionID':'999999999','description':'System Repair','createTime':'2050-12-30T23:59:59+0000','url':genurl(self.server.url, '', 'query.hicloud.com').rsplit('/',2)[0]+'/'}]})
             self.send_resp(resp.encode('utf-8'))
-        elif self.path == '/sp_ard_common/v1/authorize.action':
-            self.send_resp(b'data=&sign=&cert=') # This is what the Huawei servers sent me, idk if its correct though.
         else:
-            logging.error("Unknown POST Path: %s", self.path)
+            try:
+                import dns.resolver # Not needed on some devices so only import when needed so devices without it needed can not have to install it
+            except ModuleNotFoundError:
+                logging.error("Please read requirements.txt and uncomment the line about dnspython, then rerun the pip installation command from README.")
+                raise
+            if not resolver:
+                dns.resolver.default_resolver = dns.resolver.Resolver(configure=False) # Don't read /etc/hosts.
+                dns.resolver.default_resolver.nameservers += ['8.8.8.8', '8.8.4.4']
+            addr = dns.resolver.query('query.hicloud.com', 'A')[0].address
+            logging.debug(self.path)
+            p = genurl(self.server.url, self.path, addr, True)
+            logging.info("Serving misc POST...")
+            logging.debug("hicloud at %s", p)
+            # Forward the request.
+            r = requests.Request('POST', p, headers={}, data=post_data).prepare()
+            r.headers = dict(self.headers) # We want EXACTLY the same headers.
+            resp = s.send(r, stream=True)
+            logging.debug("request sent!")
+            logging.debug(resp.headers)
+            self.send_response(resp.status_code)
+            for h in resp.headers:
+                logging.debug('%s: %s', h, resp.headers[h])
+                self.send_header(h, resp.headers[h])
+            self.end_headers()
+            logging.debug("forwarded headers done")
+            shutil.copyfileobj(resp.raw, self.wfile)
+            logging.debug("forwarded data!")
 
 def run(server_class=ThreadingHTTPServer, handler_class=Handler, port=80):
     logging.basicConfig(level=logging.DEBUG, datefmt='')
